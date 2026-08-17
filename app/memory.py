@@ -194,7 +194,7 @@ def store_session_memories(session) -> int:
     client = vertexai.Client(
         project=settings.project_id, location=_agent_engine_location()
     )
-    client.agent_engines.memories.generate(
+    operation = client.agent_engines.memories.generate(
         name=(
             f"projects/{settings.project_id}/locations/"
             f"{_agent_engine_location()}/reasoningEngines/{engine_id}"
@@ -207,7 +207,19 @@ def store_session_memories(session) -> int:
         # misdiagnosed this for an afternoon.
         config={"wait_for_completion": True},
     )
-    return len(events)
+
+    # Report what the service actually did, not that the call returned. An
+    # accepted request here is not the same as a stored memory, and counting
+    # the events we sent would hide the difference.
+    response = getattr(operation, "response", None)
+    generated = list(getattr(response, "generated_memories", None) or [])
+    if not generated:
+        logger.warning(
+            "memory generation produced nothing from %d event(s); error=%s",
+            len(events),
+            getattr(operation, "error", None),
+        )
+    return len(generated)
 
 
 def build_session_service() -> BaseSessionService:

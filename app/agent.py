@@ -93,9 +93,14 @@ async def _store_memories(callback_context: CallbackContext) -> None:
     """
     try:
         session = callback_context._invocation_context.session
+        logger.info(
+            "memory write starting: app=%s user=%s events=%d",
+            session.app_name,
+            session.user_id,
+            len(getattr(session, "events", []) or []),
+        )
         written = await asyncio.to_thread(store_session_memories, session)
-        if written:
-            logger.info("wrote %d event(s) to memory", written)
+        logger.info("memory write finished: %d memory/memories stored", written)
     except Exception:
         logger.warning("could not write session to memory", exc_info=True)
 
