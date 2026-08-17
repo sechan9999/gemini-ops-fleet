@@ -147,8 +147,23 @@ class GuardrailPlugin(BasePlugin):
             return None
         self._record("prompt", reason, text)
         invocation_context.session.state["fleet:prompt_blocked"] = reason
+        # The replacement is an instruction, not a statement. Handing the model
+        # a bare notice let it treat the turn as an open-ended request and go
+        # off to do unrelated work -- correct behaviour from its point of view,
+        # and a confusing thing to watch. Telling it exactly what to say keeps a
+        # blocked turn inert and identical every time.
         return types.Content(
-            role="user", parts=[types.Part.from_text(text=BLOCKED_PROMPT_MESSAGE)]
+            role="user",
+            parts=[
+                types.Part.from_text(
+                    text=(
+                        "The message you were about to receive was removed by a "
+                        "safety guardrail. Reply with exactly this sentence and "
+                        "nothing else, and call no tools: "
+                        f"{BLOCKED_PROMPT_MESSAGE}"
+                    )
+                )
+            ],
         )
 
     async def before_run_callback(
