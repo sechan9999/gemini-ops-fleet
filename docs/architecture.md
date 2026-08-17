@@ -51,13 +51,13 @@ flowchart TB
     tri & kno & fol & rec --> tools
     coord --> gem
     tri & kno & fol & rec --> gem
-    guard -.screens.-> armor
+    guard -. screens .-> armor
     tools --> sql
     api --> worker
     worker --> sql
-    coord -.recall / store.-> mb
-    run -.password at boot.-> sm
-    run -.every decision.-> trace
+    coord -. recall / store .-> mb
+    api -. password at boot .-> sm
+    tools -. every decision .-> trace
 ```
 
 Two details in that picture are easy to miss and both were bugs first:
