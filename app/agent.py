@@ -77,6 +77,20 @@ def _seed_dev_identity(callback_context: CallbackContext) -> None:
     logger.info("dev identity attached: %s (%s)", identity.name, identity.role.value)
 
 
+async def _store_memories(callback_context: CallbackContext) -> None:
+    """Hand the finished turn to Memory Bank.
+
+    Runs after every turn so that what the fleet learned about a person is
+    available the next time they appear, days or weeks later. A failure here
+    must not fail the user's request -- losing a memory is a degradation, not an
+    error worth surfacing to whoever just asked a question.
+    """
+    try:
+        await callback_context.add_session_to_memory()
+    except Exception:
+        logger.warning("could not write session to memory", exc_info=True)
+
+
 def build_root_agent():
     # Imported lazily so that importing this module stays cheap for tooling that
     # only wants the App metadata.
@@ -84,6 +98,7 @@ def build_root_agent():
 
     agent = create_coordinator()
     agent.before_agent_callback = _seed_dev_identity
+    agent.after_agent_callback = _store_memories
     return agent
 
 

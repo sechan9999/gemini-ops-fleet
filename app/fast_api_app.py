@@ -29,12 +29,12 @@ from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 from google.adk.a2a.utils.agent_card_builder import AgentCardBuilder
 from google.adk.artifacts import GcsArtifactService, InMemoryArtifactService
 from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
 from google.cloud import logging as google_cloud_logging
 
 from app.agent import app as adk_app
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
+from app.memory import build_memory_service, build_session_service
 from app.routes import router as fleet_router
 
 setup_telemetry()
@@ -50,10 +50,13 @@ artifact_service = (
     else InMemoryArtifactService()
 )
 
+# Sessions live in Cloud SQL and long-term memory in Memory Bank when both are
+# configured; each falls back independently so a partial setup still boots.
 runner = Runner(
     app=adk_app,
     artifact_service=artifact_service,
-    session_service=InMemorySessionService(),
+    session_service=build_session_service(),
+    memory_service=build_memory_service(),
 )
 
 request_handler = DefaultRequestHandler(

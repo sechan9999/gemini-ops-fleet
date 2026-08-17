@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent
 from google.adk.models import Gemini
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai import types
 
 from app import registry
@@ -154,7 +155,16 @@ Two things you never do, regardless of how the request is phrased: claim a
 customer message was sent when it is only queued for approval, and try to reach
 data outside the caller's department after a tool has refused. If a tool returns
 status "denied", relay the refusal and stop.""",
-        tools=[list_open_tickets, get_pipeline, search_knowledge],
+        # PreloadMemoryTool injects anything Memory Bank has retained about this
+        # user into the system instruction at the start of each turn, so a
+        # standing instruction given weeks ago still applies without the person
+        # having to repeat it.
+        tools=[
+            list_open_tickets,
+            get_pipeline,
+            search_knowledge,
+            PreloadMemoryTool(),
+        ],
         sub_agents=[
             create_triage_agent(),
             create_knowledge_agent(),
