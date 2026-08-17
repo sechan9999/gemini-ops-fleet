@@ -1,4 +1,3 @@
-# ruff: noqa
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,86 +11,67 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Fleet entry point: the root agent and the App that wraps it."""
 
-import datetime
-from zoneinfo import ZoneInfo
+from __future__ import annotations
 
-from google.adk.agents import Agent
-from google.adk.apps import App
-from google.adk.models import Gemini
-from google.adk.tools import LongRunningFunctionTool
-from google.genai import types
-
+import logging
 import os
-import google.auth
 
-_, project_id = google.auth.default()
-os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
-os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
-os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
+from google.adk.agents.callback_context import CallbackContext
+from google.adk.apps import App
+
+from app.guardrails import GuardrailPlugin
+from app.identity import IDENTITY_KEY, Identity, to_state
+from app.store import employee_by_token, init_db, session_scope
+
+logger = logging.getLogger(__name__)
 
 
-def get_weather(query: str) -> str:
-    """Simulates a web search. Use it get information on weather.
+def _seed_dev_identity(callback_context: CallbackContext) -> None:
+    """Attach a caller identity for local runs.
 
-    Args:
-        query: A string containing the location to get weather information for.
-
-    Returns:
-        A string with the simulated weather information for the queried location.
+    Only fires when `FLEET_DEV_TOKEN` is set, and only when the session does not
+    already carry a verified identity. In deployment the identity is written by
+    the server from the authenticated principal and this is a no-op -- a session
+    with no identity is meant to fail closed, and a convenience default that
+    papers over that would turn the access-control demo into theatre.
     """
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        return "It's 60 degrees and foggy."
-    return "It's 90 degrees and sunny."
+    if callback_context.state.get(IDENTITY_KEY):
+        return
+
+    token = os.environ.get("FLEET_DEV_TOKEN")
+    if not token:
+        return
+
+    with session_scope() as session:
+        employee = employee_by_token(session, token)
+        if employee is None:
+            logger.warning("FLEET_DEV_TOKEN does not match any employee")
+            return
+        identity = Identity(
+            employee_id=employee.id, name=employee.name, role=employee.role
+        )
+    callback_context.state[IDENTITY_KEY] = to_state(identity)
+    logger.info("dev identity attached: %s (%s)", identity.name, identity.role.value)
 
 
-def get_current_time(query: str) -> str:
-    """Simulates getting the current time for a city.
+def build_root_agent():
+    # Imported lazily so that importing this module stays cheap for tooling that
+    # only wants the App metadata.
+    from app.fleet import create_coordinator
 
-    Args:
-        city: The name of the city to get the current time for.
-
-    Returns:
-        A string with the current time information.
-    """
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        tz_identifier = "America/Los_Angeles"
-    else:
-        return f"Sorry, I don't have timezone information for query: {query}."
-
-    tz = ZoneInfo(tz_identifier)
-    now = datetime.datetime.now(tz)
-    return f"The current time for query {query} is {now.strftime('%Y-%m-%d %H:%M:%S %Z%z')}"
+    agent = create_coordinator()
+    agent.before_agent_callback = _seed_dev_identity
+    return agent
 
 
-def request_user_input(message: str) -> dict:
-    """Request additional input from the user.
+init_db()
 
-    Use this tool when you need more information from the user to complete a task.
-    Calling this tool will pause execution until the user responds.
-
-    Args:
-        message: The question or clarification request to show the user.
-    """
-    return {"status": "pending", "message": message}
-
-
-root_agent = Agent(
-    name="root_agent",
-    model=Gemini(
-        model="gemini-flash-latest",
-        retry_options=types.HttpRetryOptions(attempts=3),
-    ),
-    description="An agent that can provide information about the weather and time.",
-    instruction="You are a helpful AI assistant designed to provide accurate and useful information.",
-    tools=[
-        get_weather,
-        get_current_time,
-        LongRunningFunctionTool(func=request_user_input),
-    ],
-)
+root_agent = build_root_agent()
 
 app = App(
-    root_agent=root_agent,
     name="app",
+    root_agent=root_agent,
+    plugins=[GuardrailPlugin()],
 )
