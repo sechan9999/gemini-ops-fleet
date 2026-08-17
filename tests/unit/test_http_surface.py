@@ -27,6 +27,15 @@ def client() -> TestClient:
 
 
 def auth(token: str) -> dict:
+    """The header the deployed service uses.
+
+    Cloud Run's IAM layer claims Authorization, so the employee token travels
+    in its own header.
+    """
+    return {"X-Fleet-Token": token}
+
+
+def legacy_auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -41,6 +50,12 @@ def test_protected_routes_reject_a_missing_token(client: TestClient):
 def test_protected_routes_reject_an_unknown_token(client: TestClient):
     response = client.get("/fleet/approvals", headers=auth("tok-nonexistent"))
     assert response.status_code == 401
+
+
+def test_the_authorization_header_still_works(client: TestClient):
+    """Kept as a fallback for local runs and unauthenticated ingress."""
+    response = client.get("/fleet/approvals", headers=legacy_auth("tok-manager"))
+    assert response.status_code == 200
 
 
 # --- Discovery -------------------------------------------------------------

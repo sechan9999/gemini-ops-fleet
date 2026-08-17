@@ -29,14 +29,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/fleet", tags=["fleet"])
 
 
-def current_employee(authorization: str = Header(default="")) -> Identity:
-    """Resolve the caller from a bearer token.
+def current_employee(
+    x_fleet_token: str = Header(default=""),
+    authorization: str = Header(default=""),
+) -> Identity:
+    """Resolve the caller from their employee token.
 
     The server's half of the identity contract: the role attached to a request
     is looked up here and passed down, so no downstream code has to trust a
     value that arrived in the payload.
+
+    Read from `X-Fleet-Token` rather than `Authorization`, because Cloud Run's
+    IAM layer claims the Authorization header for its own identity token before
+    the request reaches the app. Authorization is still accepted as a fallback
+    so the same code works behind an unauthenticated ingress or locally.
     """
-    token = authorization.removeprefix("Bearer ").strip()
+    token = (
+        x_fleet_token.strip() or authorization.removeprefix("Bearer ").strip()
+    )
     if not token:
         raise HTTPException(status_code=401, detail="missing employee token")
 
