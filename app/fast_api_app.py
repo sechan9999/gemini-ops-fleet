@@ -35,6 +35,7 @@ from google.cloud import logging as google_cloud_logging
 from app.agent import app as adk_app
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
+from app.routes import router as fleet_router
 
 setup_telemetry()
 _, project_id = google.auth.default()
@@ -101,6 +102,10 @@ app = FastAPI(
     description="API for interacting with the Agent gemini-ops-fleet",
     lifespan=lifespan,
 )
+
+# The governance surface: approval queue, agent registry, audit trail, and the
+# Pub/Sub push endpoint that drives the fleet asynchronously.
+app.include_router(fleet_router)
 
 
 @app.post("/feedback")

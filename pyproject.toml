@@ -60,6 +60,11 @@ select = [
 ]
 ignore = ["E501", "C901", "B006"] # ignore line too long, too complex
 
+[tool.ruff.lint.per-file-ignores]
+# Depends() in an argument default is how FastAPI declares a dependency; the
+# bugbear rule is aimed at accidental mutable defaults and does not apply.
+"app/routes.py" = ["B008"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["app", "frontend"]
 

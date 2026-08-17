@@ -15,6 +15,7 @@ from google.adk.tools import ToolContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import tracing
 from app.domain import AuditEntry, Customer, Role
 
 # Session-state key holding the verified caller. Written once by the server when
@@ -102,6 +103,12 @@ def assert_can_view_customer(
 def audit(
     session: Session, identity: Identity, tool: str, outcome: str, detail: str
 ) -> None:
+    """Record a tool call in both durable and observable form.
+
+    The database row is the retained audit trail; the span attribute is the
+    live one an operator reads in Cloud Trace. Writing both from a single call
+    site is what keeps them from drifting apart.
+    """
     session.add(
         AuditEntry(
             actor=identity.name,
@@ -111,3 +118,4 @@ def audit(
             detail=detail,
         )
     )
+    tracing.record_tool_outcome(tool, identity.role.value, outcome, detail)

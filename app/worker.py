@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from app import tracing
 from app.domain import Activity
 from app.fleet import EVENT_ROUTES
 from app.store import session_scope
@@ -80,7 +81,11 @@ def drain_once(handler: Handler | None = None, limit: int = 50) -> DispatchResul
             continue
 
         try:
-            outcome = handler(agent_name, kind, payload)
+            # Each dispatch gets its own root span. Background work has no
+            # incoming request to hang off, so without this the asynchronous
+            # half of the system would be invisible in Cloud Trace.
+            with tracing.route_span(kind, agent_name, activity_id):
+                outcome = handler(agent_name, kind, payload)
         except Exception:
             # Leave the row unclaimed so the next drain retries it.
             logger.exception("handler failed for activity %s", activity_id)

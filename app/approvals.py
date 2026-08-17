@@ -10,6 +10,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import tracing
 from app.domain import Approval, Customer
 from app.identity import Identity
 from app.store import emit
@@ -32,14 +33,15 @@ def approve(session: Session, approval_id: int, approver: Identity) -> Approval:
     approval = session.get(Approval, approval_id)
     if approval is None:
         raise NotApproved(f"no approval {approval_id}")
-    approval.approved = True
-    approval.approved_by = approver.name
-    emit(
-        session,
-        "followup.approved",
-        {"approval_id": approval.id},
-        actor=approver.name,
-    )
+    with tracing.approval_span("approve", approval_id, approver.name):
+        approval.approved = True
+        approval.approved_by = approver.name
+        emit(
+            session,
+            "followup.approved",
+            {"approval_id": approval.id},
+            actor=approver.name,
+        )
     return approval
 
 

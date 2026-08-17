@@ -21,6 +21,7 @@ from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.tools import BaseTool, ToolContext
 from google.genai import types
 
+from app import tracing
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,7 @@ class GuardrailPlugin(BasePlugin):
         entry = {"stage": stage, "reason": reason, "sample": sample[:120]}
         self.blocked.append(entry)
         logger.warning("guardrail blocked %s: %s", stage, reason)
+        tracing.record_guardrail_block(stage, reason)
 
     async def on_user_message_callback(
         self,
