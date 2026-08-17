@@ -50,6 +50,9 @@ gemini-ops-fleet/
 
 ## How It Works
 
+Full diagrams — system, authorization path, and the asynchronous event path —
+are in [docs/architecture.md](docs/architecture.md). The short version:
+
 A single `Activity` stream is the spine. Business changes write an event in the
 same transaction, and agents consume that stream rather than a chat box:
 
