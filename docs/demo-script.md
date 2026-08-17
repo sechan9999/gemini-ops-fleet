@@ -68,22 +68,28 @@ back.
 ## Act 3 — Demo (1:05–3:15)
 
 ### Cut 4 · 1:05–1:32 · 27s — 비동기 실행
-**[화면]** 터미널. Pub/Sub 푸시 엔벨로프 전송.
+**[화면]** 터미널 좌측에서 **실제 토픽에 발행**하고, 우측에서 이벤트 스트림을 조회한다. 엔드포인트를 직접 때리지 않는 것이 핵심 — 진짜 Pub/Sub 배달이어야 한다.
 
 ```bash
-curl -s -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
-  -d "{\"message\":{\"data\":\"$DATA\",\"messageId\":\"demo\"}}" \
-  "$URL/fleet/trigger/pubsub"
+gcloud pubsub topics publish fleet-events \
+  --message='{"kind":"as.opened","payload":{"ticket_id":1}}'
 ```
 
-**[강조]** 응답의 `"routed_to":"triage_agent"` 에 커서.
+**[대기]** 배달까지 약 10초. 편집에서 잘라내되, **완전히 없애지는 말 것** — 짧은 공백이 "사람이 기다리지 않는다"는 서사를 오히려 살린다.
 
-> Start with the part that is not a chat. A ticket event arrives by Pub/Sub. No
-> one is typing. The outbox drain claims it, routes it by kind, and the triage
-> agent picks it up. Routing is a table, not a judgement call — the same event
-> always reaches the same owner.
+```bash
+curl -s -H "Authorization: Bearer $T" -H "X-Fleet-Token: tok-manager" \
+  "$URL/fleet/events?limit=1"
+```
 
-*(53 words)*
+**[강조]** `actor: "pubsub"` 와 `dispatched: true` 에 커서.
+
+> Start with the part that is not a chat. I publish a ticket event to a Pub/Sub
+> topic and close the terminal. Nobody is typing. Pub/Sub pushes it to the
+> service, the drain claims it, and the triage agent picks it up. Routing is a
+> table, not a judgement call — the same event always reaches the same owner.
+
+*(56 words)*
 
 ### Cut 5 · 1:32–2:05 · 33s — 접근제어 (핵심 컷)
 **[화면]** `demo.py` 실행 중 섹션 2와 3을 나란히. 화면을 좌우 분할해 두 응답을 동시에 보이면 가장 강하다.

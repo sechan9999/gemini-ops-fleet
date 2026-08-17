@@ -180,6 +180,35 @@ Engine on first boot and reuses it by display name afterwards.
 Demo employee tokens, one per department: `tok-sales`, `tok-support`,
 `tok-accounting`, `tok-manager`.
 
+## Driving the Fleet
+
+Events, not prompts. Publish to the topic and walk away:
+
+```bash
+gcloud pubsub topics publish fleet-events \
+  --message='{"kind":"as.opened","payload":{"ticket_id":1}}'
+```
+
+Pub/Sub pushes to the service with an OIDC token minted for a dedicated push
+identity, so the service stays private — driving it asynchronously never
+requires opening it to the internet. Delivery takes a few seconds; the event
+then appears in `GET /fleet/events` with `actor: "pubsub"` and
+`dispatched: true`.
+
+| Event kind | Owning agent |
+|---|---|
+| `as.opened` | triage |
+| `as.resolved` | knowledge |
+| `delivery.done` | follow-up |
+| `transaction.posted` | reconcile |
+
+An event with no owner is marked handled and logged rather than retried, so one
+unrouted message cannot bury the queue behind it.
+
+Topic, subscription, push identity, and the two IAM bindings they need are
+defined in
+[`deployment/terraform/single-project/pubsub.tf`](deployment/terraform/single-project/pubsub.tf).
+
 ## The Governance API
 
 | Endpoint | Purpose |
