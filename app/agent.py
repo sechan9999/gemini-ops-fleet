@@ -23,7 +23,7 @@ from google.adk.apps import App
 
 from app.guardrails import GuardrailPlugin
 from app.identity import IDENTITY_KEY, Identity, to_state
-from app.store import employee_by_token, init_db, session_scope
+from app.store import employee_by_token, seed_if_empty, session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,11 @@ def build_root_agent():
 
 
 _route_to_vertex()
-init_db()
+
+# Non-destructive: writes the demo company only into an empty database, so a
+# restarting instance never overwrites rows that are already there.
+if seed_if_empty():
+    logger.info("seeded demo data into an empty database")
 
 root_agent = build_root_agent()
 

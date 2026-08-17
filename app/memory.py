@@ -23,7 +23,7 @@ import os
 from google.adk.memory import BaseMemoryService, InMemoryMemoryService
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
-from app.config import get_settings
+from app.config import get_settings, redact
 
 logger = logging.getLogger(__name__)
 
@@ -102,19 +102,30 @@ def build_memory_service() -> BaseMemoryService:
 
 
 def build_session_service() -> BaseSessionService:
-    """Durable sessions on Cloud SQL, in-memory otherwise."""
+    """Durable sessions on Cloud SQL, in-memory otherwise.
+
+    Uses the async URL: ADK's session store runs on SQLAlchemy's asyncio
+    extension and refuses a synchronous driver, while the fleet's own
+    repository code is synchronous. Same database, two drivers.
+    """
     settings = get_settings()
-    if not settings.is_postgres:
-        logger.info("sessions are in-process (no Postgres configured)")
+    if not settings.session_database_url:
+        logger.info("sessions are in-process (no Cloud SQL configured)")
         return InMemorySessionService()
 
     try:
         from google.adk.sessions import DatabaseSessionService
 
-        service = DatabaseSessionService(db_url=settings.database_url)
+        service = DatabaseSessionService(db_url=settings.session_database_url)
         logger.info("sessions persisted to Cloud SQL")
         return service
-    except Exception:
-        logger.warning("could not open the session database; using in-process sessions",
-                       exc_info=True)
+    except Exception as exc:
+        # Never log the exception object or a traceback here. A failed
+        # connection raises with the full URL -- password included -- in its
+        # message, and logging it would publish the credential.
+        logger.warning(
+            "could not open the session database (%s); using in-process sessions: %s",
+            redact(settings.session_database_url),
+            type(exc).__name__,
+        )
         return InMemorySessionService()

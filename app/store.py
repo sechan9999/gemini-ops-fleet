@@ -68,6 +68,21 @@ def emit(session: Session, kind: str, payload: dict, actor: str) -> Activity:
     return activity
 
 
+def seed_if_empty() -> bool:
+    """Populate demo data only when the database has none.
+
+    Kept strictly separate from `reset_and_seed`, which drops tables. This one
+    is safe to call on every boot: an instance restarting against a database
+    that already holds real rows leaves them alone.
+    """
+    init_db()
+    with session_scope() as session:
+        if session.scalar(select(Employee).limit(1)) is not None:
+            return False
+    _populate()
+    return True
+
+
 def reset_and_seed() -> None:
     """Drop, recreate, and populate a small demo company.
 
@@ -79,7 +94,11 @@ def reset_and_seed() -> None:
     engine = get_engine()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    _populate()
 
+
+def _populate() -> None:
+    """Write the demo company. Assumes the tables exist and are empty."""
     with session_scope() as s:
         jin = Employee(name="Jin (sales)", role=Role.SALES, api_token="tok-sales")
         min_ = Employee(name="Min (support)", role=Role.SUPPORT, api_token="tok-support")
