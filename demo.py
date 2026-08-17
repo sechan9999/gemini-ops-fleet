@@ -20,6 +20,7 @@ from google.genai import types
 from app.agent import app as adk_app
 from app.config import get_settings
 from app.identity import IDENTITY_KEY, Identity, to_state
+from app.memory import build_memory_service
 from app.store import employee_by_token, reset_and_seed, session_scope
 
 APP_NAME = "app"
@@ -36,11 +37,14 @@ def _identity(token: str) -> Identity:
 
 
 async def ask(runner: Runner, token: str, prompt: str) -> str:
-    """Run one turn as a specific employee.
+    """Run one turn as a specific employee, in a brand-new session.
 
     The identity is written into session state by this function -- the caller's
     server-side equivalent of reading an authenticated principal. Nothing in the
     prompt can change it.
+
+    Every call opens a fresh session on purpose. Anything the fleet still knows
+    across two calls came from Memory Bank, not from conversation history.
     """
     who = _identity(token)
     session = await runner.session_service.create_session(
@@ -72,7 +76,13 @@ async def main() -> None:
     print(f"model: {settings.model}")
     print(f"project: {settings.project_id or '(from ADC)'}")
 
-    runner = Runner(app=adk_app, session_service=InMemorySessionService())
+    memory_service = build_memory_service()
+    print(f"memory: {type(memory_service).__name__}")
+    runner = Runner(
+        app=adk_app,
+        session_service=InMemorySessionService(),
+        memory_service=memory_service,
+    )
 
     header(1, "A shared policy is visible to sales")
     print(await ask(runner, "tok-sales", "What is our refund policy? Cite the source."))
@@ -122,6 +132,27 @@ async def main() -> None:
         print(f"\n-> approval queue: {len(queue)} draft(s) waiting on a human")
         for item in queue:
             print(f"   #{item.id} approved={item.approved} sent={item.sent}")
+
+    header(6, "A standing instruction survives into a new session")
+    print(
+        await ask(
+            runner,
+            "tok-support",
+            "Remember this for future work: Acme Machining always wants tooling "
+            "issues escalated to high severity, no matter how few units are "
+            "affected.",
+        )
+    )
+    print("\n--- new session, nothing carried over but Memory Bank ---\n")
+    print(
+        await ask(
+            runner,
+            "tok-support",
+            "What do you know about how Acme Machining wants tooling issues handled?",
+        )
+    )
+    print("\n-> If the second answer recalls the escalation rule, it came from")
+    print("   Memory Bank: the two turns ran in different sessions.")
 
 
 if __name__ == "__main__":

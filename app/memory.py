@@ -39,6 +39,48 @@ def _agent_engine_location() -> str:
     return os.environ.get("AGENT_ENGINE_LOCATION", "us-central1")
 
 
+def build_memory_bank_config():
+    """Declare what is worth remembering between conversations.
+
+    A memory bank created without topics extracts nothing -- the config is not
+    an optional refinement, it is what tells the extractor to look. Three
+    managed topics matter for back-office work:
+
+    - EXPLICIT_INSTRUCTIONS: "from now on, escalate Acme tooling issues"
+    - USER_PREFERENCES: how a colleague likes drafts written
+    - KEY_CONVERSATION_DETAILS: outcomes worth carrying to the next ticket
+    """
+    from vertexai._genai.types import (
+        ManagedTopicEnum,
+        MemoryBankCustomizationConfig,
+        MemoryBankCustomizationConfigMemoryTopic,
+        MemoryBankCustomizationConfigMemoryTopicManagedMemoryTopic,
+        ReasoningEngineContextSpecMemoryBankConfig,
+    )
+
+    topics = [
+        ManagedTopicEnum.EXPLICIT_INSTRUCTIONS,
+        ManagedTopicEnum.USER_PREFERENCES,
+        ManagedTopicEnum.KEY_CONVERSATION_DETAILS,
+    ]
+    return ReasoningEngineContextSpecMemoryBankConfig(
+        customization_configs=[
+            MemoryBankCustomizationConfig(
+                memory_topics=[
+                    MemoryBankCustomizationConfigMemoryTopic(
+                        managed_memory_topic=(
+                            MemoryBankCustomizationConfigMemoryTopicManagedMemoryTopic(
+                                managed_topic_enum=topic
+                            )
+                        )
+                    )
+                    for topic in topics
+                ]
+            )
+        ]
+    )
+
+
 def ensure_agent_engine() -> str | None:
     """Return the id of the Agent Engine backing Memory Bank, creating it once.
 
@@ -54,7 +96,6 @@ def ensure_agent_engine() -> str | None:
         from vertexai._genai.types import (
             AgentEngineConfig,
             ReasoningEngineContextSpec,
-            ReasoningEngineContextSpecMemoryBankConfig,
         )
 
         client = vertexai.Client(
@@ -69,7 +110,7 @@ def ensure_agent_engine() -> str | None:
             config=AgentEngineConfig(
                 display_name=AGENT_ENGINE_NAME,
                 context_spec=ReasoningEngineContextSpec(
-                    memory_bank_config=ReasoningEngineContextSpecMemoryBankConfig()
+                    memory_bank_config=build_memory_bank_config()
                 ),
             )
         )
