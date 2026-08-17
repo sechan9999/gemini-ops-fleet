@@ -55,7 +55,10 @@ def build_memory_bank_config():
         MemoryBankCustomizationConfig,
         MemoryBankCustomizationConfigMemoryTopic,
         MemoryBankCustomizationConfigMemoryTopicManagedMemoryTopic,
+        MemoryGenerationTriggerConfig,
+        MemoryGenerationTriggerConfigGenerationTriggerRule,
         ReasoningEngineContextSpecMemoryBankConfig,
+        ReasoningEngineContextSpecMemoryBankConfigGenerationConfig,
     )
 
     topics = [
@@ -77,7 +80,19 @@ def build_memory_bank_config():
                     for topic in topics
                 ]
             )
-        ]
+        ],
+        # Without a trigger rule, ingested events are stored and never turned
+        # into memories -- ingestion succeeds, the bank stays empty, and nothing
+        # in the response says why. Generating after a single event keeps a
+        # colleague's standing instruction usable on the very next request,
+        # which is the behaviour a back-office fleet needs.
+        generation_config=ReasoningEngineContextSpecMemoryBankConfigGenerationConfig(
+            generation_trigger_config=MemoryGenerationTriggerConfig(
+                generation_rule=MemoryGenerationTriggerConfigGenerationTriggerRule(
+                    event_count=1
+                )
+            )
+        ),
     )
 
 
@@ -140,6 +155,59 @@ def build_memory_service() -> BaseMemoryService:
     except Exception:
         logger.warning("could not attach Memory Bank; using in-process memory")
         return InMemoryMemoryService()
+
+
+def store_session_memories(session) -> int:
+    """Turn a finished conversation into memories, and return how many events fed it.
+
+    ADK's `add_session_to_memory` posts to `ingest_events`, which the service
+    accepts and acknowledges -- and which produced no memories for us under any
+    combination of topic and trigger configuration we tried. Generation from the
+    same content works immediately, so this calls `memories.generate` directly
+    rather than waiting on a path that reports success without doing anything.
+
+    The scope is the same `{app_name, user_id}` pair ADK's retrieval uses, which
+    is what lets `PreloadMemoryTool` find what this writes.
+    """
+    engine_id = os.environ.get("AGENT_ENGINE_ID") or ensure_agent_engine()
+    settings = get_settings()
+    if not engine_id or not settings.project_id:
+        return 0
+
+    events = []
+    for event in getattr(session, "events", []) or []:
+        content = getattr(event, "content", None)
+        parts = getattr(content, "parts", None) or []
+        text = "".join(p.text or "" for p in parts).strip()
+        if not text:
+            continue
+        events.append(
+            {"content": {"role": getattr(content, "role", "user") or "user",
+                         "parts": [{"text": text}]}}
+        )
+
+    if not events:
+        return 0
+
+    import vertexai
+
+    client = vertexai.Client(
+        project=settings.project_id, location=_agent_engine_location()
+    )
+    client.agent_engines.memories.generate(
+        name=(
+            f"projects/{settings.project_id}/locations/"
+            f"{_agent_engine_location()}/reasoningEngines/{engine_id}"
+        ),
+        direct_contents_source={"events": events},
+        scope={"app_name": session.app_name, "user_id": session.user_id},
+        # Generation is a long-running operation. Returning before it finishes
+        # means the next session can ask a question the bank cannot yet answer
+        # -- which looks exactly like memory not working at all, and is how we
+        # misdiagnosed this for an afternoon.
+        config={"wait_for_completion": True},
+    )
+    return len(events)
 
 
 def build_session_service() -> BaseSessionService:

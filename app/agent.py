@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 
@@ -23,6 +24,7 @@ from google.adk.apps import App
 
 from app.guardrails import GuardrailPlugin
 from app.identity import IDENTITY_KEY, Identity, to_state
+from app.memory import store_session_memories
 from app.store import employee_by_token, seed_if_empty, session_scope
 
 logger = logging.getLogger(__name__)
@@ -84,9 +86,16 @@ async def _store_memories(callback_context: CallbackContext) -> None:
     available the next time they appear, days or weeks later. A failure here
     must not fail the user's request -- losing a memory is a degradation, not an
     error worth surfacing to whoever just asked a question.
+
+    Goes through `store_session_memories` rather than ADK's
+    `add_session_to_memory`: that helper posts to the ingest endpoint, which
+    acknowledges the request and then produces nothing. See `app/memory.py`.
     """
     try:
-        await callback_context.add_session_to_memory()
+        session = callback_context._invocation_context.session
+        written = await asyncio.to_thread(store_session_memories, session)
+        if written:
+            logger.info("wrote %d event(s) to memory", written)
     except Exception:
         logger.warning("could not write session to memory", exc_info=True)
 
