@@ -28,6 +28,27 @@ from app.store import employee_by_token, init_db, session_scope
 logger = logging.getLogger(__name__)
 
 
+def _route_to_vertex() -> None:
+    """Point the GenAI SDK at Vertex AI using the ambient credentials.
+
+    Cloud Run supplies the project through the metadata server and locally it
+    comes from ADC, so neither path needs the value hard-coded. Existing values
+    win, which keeps the offline test run free of any cloud dependency.
+    """
+    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
+    if os.environ.get("GOOGLE_CLOUD_PROJECT"):
+        return
+    try:
+        import google.auth
+
+        _, project_id = google.auth.default()
+    except Exception:  # pragma: no cover - no credentials on a bare checkout
+        logger.warning("no ambient GCP credentials; model calls will fail")
+        return
+    if project_id:
+        os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+
+
 def _seed_dev_identity(callback_context: CallbackContext) -> None:
     """Attach a caller identity for local runs.
 
@@ -66,6 +87,7 @@ def build_root_agent():
     return agent
 
 
+_route_to_vertex()
 init_db()
 
 root_agent = build_root_agent()
