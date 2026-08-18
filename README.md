@@ -44,7 +44,7 @@ gemini-ops-fleet/
 │   ├── domain.py        # Event stream and business records
 │   └── store.py         # Engine, event emission, demo seed
 ├── demo.py              # End-to-end proof of the five claims
-├── tests/unit/          # 48 tests, no credentials required
+├── tests/unit/          # 47 tests, no credentials required
 └── deployment/terraform/
 ```
 
@@ -97,7 +97,7 @@ uv sync --group dev
 uv run pytest tests/unit -q
 ```
 
-48 tests, covering the access-control and human-gate claims above.
+47 tests, covering the access-control and human-gate claims above.
 
 To exercise the whole system against the real model, authenticate first:
 
